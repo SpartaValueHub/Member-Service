@@ -19,14 +19,14 @@ public class TermRepositoryAdapter implements LoadActiveTermsPort {
 
     @Override
     public List<TermDomain> findAllActive() {
-        return termJpaRepository.findByIsActiveTrue().stream()
+        return termJpaRepository.findByActiveTrue().stream()
                 .map(termEntityMapper::toDomain)
                 .toList();
     }
 
     @Override
     public List<TermDomain> findAllCurrentlyEffective(Instant at) {
-        return termJpaRepository.findCurrentlyEffectiveTerms(at).stream()
+        return termJpaRepository.findCurrentlyEffectiveTerms().stream()
                 .map(termEntityMapper::toDomain)
                 .toList();
     }
