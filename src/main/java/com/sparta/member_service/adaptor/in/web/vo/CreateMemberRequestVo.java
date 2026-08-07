@@ -4,6 +4,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @NoArgsConstructor
 @Schema(description = "회원 프로필 생성 요청")
@@ -20,4 +23,7 @@ public class CreateMemberRequestVo {
 
     @Schema(description = "주소", example = "서울특별시 강남구 테헤란로 123")
     private String address;
+
+    @Schema(description = "회원가입 약관 동의 목록")
+    private List<TermConsentItemVo> termConsents = new ArrayList<>();
 }

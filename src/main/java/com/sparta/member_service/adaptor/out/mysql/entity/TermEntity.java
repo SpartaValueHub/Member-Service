@@ -62,7 +62,7 @@ public class TermEntity {
     private String version;
 
     @Lob
-    @Column(name = "content")
+    @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "effective_at", nullable = false)

@@ -2,6 +2,7 @@ package com.sparta.member_service.adaptor.in.web;
 
 import com.sparta.member_service.adaptor.in.web.vo.ErrorResponseVo;
 import com.sparta.member_service.application.exception.DuplicateResourceException;
+import com.sparta.member_service.application.exception.InvalidTermConsentException;
 import com.sparta.member_service.application.exception.MemberNotFoundException;
 import com.sparta.member_service.application.exception.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +23,15 @@ public class GlobalExceptionHandler {
     ) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", ex.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(InvalidTermConsentException.class)
+    public ResponseEntity<ErrorResponseVo> handleInvalidTermConsent(
+            InvalidTermConsentException ex,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(error(HttpStatus.BAD_REQUEST, ex.getCode(), ex.getMessage(), request.getRequestURI()));
     }
 
     @ExceptionHandler(DuplicateResourceException.class)
