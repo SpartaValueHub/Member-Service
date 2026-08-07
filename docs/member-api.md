@@ -14,6 +14,60 @@
 
 ---
 
+## 현재 유효 약관 목록
+
+### Summary
+회원가입 화면 등에 노출할 현재 유효한 약관 목록을 조회합니다. Gateway public path — JWT 불필요.
+
+### Method · Path
+`GET /api/v1/terms/active`
+
+### Auth
+불필요 (회원가입 전 public API)
+
+### Request
+없음
+
+### Response (200)
+
+배열. 각 항목:
+
+| 필드 | 타입 |
+|------|------|
+| termId | number |
+| termCode | string (`TERMS_OF_SERVICE` · `PRIVACY_POLICY` · `EMAIL_MARKETING` · `SMS_MARKETING`) |
+| termName | string |
+| termType | string (`SERVICE` · `PRIVACY` · `MARKETING`) |
+| required | boolean |
+| version | string |
+| content | string |
+| effectiveAt | string (ISO-8601) |
+
+```json
+[
+  {
+    "termId": 1,
+    "termCode": "TERMS_OF_SERVICE",
+    "termName": "이용약관",
+    "termType": "SERVICE",
+    "required": true,
+    "version": "1.0",
+    "content": "약관 본문...",
+    "effectiveAt": "2026-01-01T00:00:00Z"
+  }
+]
+```
+
+조회 조건: `is_active=true`, `effective_at <= now`, `expired_at IS NULL OR expired_at > now`, `term_id ASC` 정렬.
+
+### Errors
+
+| status | code | 의미 |
+|--------|------|------|
+| 500 | INTERNAL_ERROR | 서버 오류 |
+
+---
+
 ## 닉네임 중복 확인
 
 ### Summary
@@ -70,12 +124,21 @@
 | nickname | string | O | 50자 이하, trim |
 | profileImageUrl | string | X | 500자 이하 |
 | address | string | X | 100자 이하 |
+| termConsents | array | O | 약관 동의 목록. 활성·동의가능 필수 약관은 `agreed=true` 필수 |
+| termConsents[].termCode | string | O | `TERMS_OF_SERVICE` · `PRIVACY_POLICY` · `EMAIL_MARKETING` · `SMS_MARKETING` |
+| termConsents[].agreed | boolean | O | 동의 여부. 선택 약관은 `true`일 때만 이력 저장 |
 
 ```json
 {
   "memberUuid": "550e8400-e29b-41d4-a716-446655440000",
   "nickname": "홍길동",
-  "address": "서울특별시 강남구 테헤란로 123"
+  "address": "서울특별시 강남구 테헤란로 123",
+  "termConsents": [
+    { "termCode": "TERMS_OF_SERVICE", "agreed": true },
+    { "termCode": "PRIVACY_POLICY", "agreed": true },
+    { "termCode": "EMAIL_MARKETING", "agreed": false },
+    { "termCode": "SMS_MARKETING", "agreed": true }
+  ]
 }
 ```
 
@@ -103,12 +166,15 @@
 
 | status | code | 의미 |
 |--------|------|------|
-| 400 | INVALID_REQUEST | nickname·address 등 형식 오류 |
+| 400 | INVALID_REQUEST | nickname·address·termConsents 등 형식 오류 |
+| 400 | TERM_REQUIRED_CONSENT_MISSING | 필수 약관 미동의 |
+| 400 | TERM_MASTER_MISSING | 동의 가능한 필수 약관 마스터 없음 |
 | 401 | MEMBER_AUTH_MISSING | JWT·X-Member-Uuid 헤더 없음 |
 | 401 | MEMBER_UUID_REQUIRED | body memberUuid 누락 |
 | 401 | MEMBER_UUID_MISMATCH | X-Member-Uuid와 body memberUuid 불일치 |
 | 409 | MEMBER_DUPLICATE_UUID | 이미 등록된 회원 |
 | 409 | MEMBER_DUPLICATE_NICKNAME | 닉네임 중복 |
+| 409 | MEMBER_PROFILE_CONFLICT | 동일 UUID에 다른 프로필로 재요청 |
 
 ---
 

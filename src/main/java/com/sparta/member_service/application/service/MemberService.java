@@ -1,6 +1,7 @@
 package com.sparta.member_service.application.service;
 
 import com.sparta.member_service.application.exception.DuplicateResourceException;
+import com.sparta.member_service.application.exception.InvalidTermConsentException;
 import com.sparta.member_service.application.exception.MemberNotFoundException;
 import com.sparta.member_service.application.port.in.CheckNicknameAvailabilityUseCase;
 import com.sparta.member_service.application.port.in.CreateMemberUseCase;
@@ -9,13 +10,28 @@ import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.CreateMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
+import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
+import com.sparta.member_service.application.port.out.LoadActiveTermsPort;
 import com.sparta.member_service.application.port.out.MemberRepositoryPort;
+import com.sparta.member_service.application.port.out.SaveMemberTermConsentPort;
+import com.sparta.member_service.domain.enums.ConsentAction;
+import com.sparta.member_service.domain.enums.ConsentChannel;
+import com.sparta.member_service.domain.enums.TermCode;
 import com.sparta.member_service.domain.model.MemberDomain;
+import com.sparta.member_service.domain.model.MemberTermConsentDomain;
+import com.sparta.member_service.domain.model.TermDomain;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
@@ -24,6 +40,9 @@ import java.util.Objects;
 public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabilityUseCase, GetMyMemberUseCase {
 
     private final MemberRepositoryPort memberRepositoryPort;
+    private final LoadActiveTermsPort loadActiveTermsPort;
+    private final SaveMemberTermConsentPort saveMemberTermConsentPort;
+    private final PlatformTransactionManager transactionManager;
 
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -46,9 +65,19 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
             throw new DuplicateResourceException("MEMBER_DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.");
         }
 
-        MemberDomain saved;
+        Instant actionAt = Instant.now();
+        List<MemberTermConsentDomain> consents = buildSignupConsents(
+                memberUuid,
+                requestDto.getTermConsents(),
+                actionAt
+        );
+
         try {
-            saved = memberRepositoryPort.save(requested);
+            return new TransactionTemplate(transactionManager).execute(status -> {
+                MemberDomain saved = memberRepositoryPort.save(requested);
+                saveMemberTermConsentPort.saveAll(consents);
+                return toCreateResult(saved, true);
+            });
         } catch (DuplicateResourceException ex) {
             if ("MEMBER_DUPLICATE_UUID".equals(ex.getCode())) {
                 MemberDomain concurrent = memberRepositoryPort.findByMemberUuid(memberUuid)
@@ -57,8 +86,70 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
             }
             throw ex;
         }
+    }
 
-        return toCreateResult(saved, true);
+    /**
+     * 필수 약관 동의 검증 후 SIGN_UP 채널 AGREE 이력만 생성.
+     * 선택 약관은 agreed=true 인 경우만 저장한다.
+     */
+    private List<MemberTermConsentDomain> buildSignupConsents(
+            String memberUuid,
+            List<TermConsentItemDto> termConsents,
+            Instant actionAt
+    ) {
+        Map<TermCode, Boolean> agreedByCode = toAgreedMap(termConsents);
+
+        List<TermDomain> consentableTerms = loadActiveTermsPort.findAllActive().stream()
+                .filter(term -> term.isConsentableAt(actionAt))
+                .toList();
+
+        List<TermDomain> requiredTerms = consentableTerms.stream()
+                .filter(TermDomain::isRequired)
+                .toList();
+        if (requiredTerms.isEmpty()) {
+            throw new InvalidTermConsentException(
+                    "TERM_MASTER_MISSING",
+                    "필수 약관 마스터 데이터가 없습니다. 약관을 등록한 뒤 다시 시도해 주세요."
+            );
+        }
+
+        for (TermDomain required : requiredTerms) {
+            if (!Boolean.TRUE.equals(agreedByCode.get(required.getTermCode()))) {
+                throw new InvalidTermConsentException(
+                        "TERM_REQUIRED_CONSENT_MISSING",
+                        "필수 약관에 동의해 주세요."
+                );
+            }
+        }
+
+        List<MemberTermConsentDomain> consents = new ArrayList<>();
+        for (TermDomain term : consentableTerms) {
+            if (!Boolean.TRUE.equals(agreedByCode.get(term.getTermCode()))) {
+                continue;
+            }
+            consents.add(MemberTermConsentDomain.record(
+                    term,
+                    memberUuid,
+                    ConsentAction.AGREE,
+                    ConsentChannel.SIGN_UP,
+                    actionAt
+            ));
+        }
+        return consents;
+    }
+
+    private Map<TermCode, Boolean> toAgreedMap(List<TermConsentItemDto> termConsents) {
+        Map<TermCode, Boolean> agreedByCode = new EnumMap<>(TermCode.class);
+        if (termConsents == null) {
+            return agreedByCode;
+        }
+        for (TermConsentItemDto item : termConsents) {
+            if (item == null || item.getTermCode() == null) {
+                throw new IllegalArgumentException("termConsents.termCode는 필수입니다.");
+            }
+            agreedByCode.put(item.getTermCode(), item.isAgreed());
+        }
+        return agreedByCode;
     }
 
     private CreateMemberResultDto idempotentResult(MemberDomain existing, MemberDomain requested) {
