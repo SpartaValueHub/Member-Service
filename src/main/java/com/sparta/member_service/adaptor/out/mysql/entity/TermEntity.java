@@ -17,6 +17,8 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -52,11 +54,14 @@ public class TermEntity {
     @Column(name = "term_type", nullable = false, length = 20)
     private TermType termType;
 
+    /** MySQL bit(1) — JDBC TINYINT로 읽어 JPQL boolean 조건과 일치 */
+    @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "is_required", nullable = false)
-    private boolean isRequired;
+    private boolean required;
 
+    @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(name = "is_active", nullable = false)
-    private boolean isActive;
+    private boolean active;
 
     @Column(name = "version", nullable = false, length = 20)
     private String version;
@@ -84,8 +89,8 @@ public class TermEntity {
             TermCode termCode,
             String termName,
             TermType termType,
-            boolean isRequired,
-            boolean isActive,
+            boolean required,
+            boolean active,
             String version,
             String content,
             Instant effectiveAt,
@@ -94,8 +99,8 @@ public class TermEntity {
         this.termCode = termCode;
         this.termName = termName;
         this.termType = termType;
-        this.isRequired = isRequired;
-        this.isActive = isActive;
+        this.required = required;
+        this.active = active;
         this.version = version;
         this.content = content;
         this.effectiveAt = effectiveAt;
@@ -106,8 +111,8 @@ public class TermEntity {
     public void updateTerm(
             String termName,
             TermType termType,
-            boolean isRequired,
-            boolean isActive,
+            boolean required,
+            boolean active,
             String version,
             String content,
             Instant effectiveAt,
@@ -115,8 +120,8 @@ public class TermEntity {
     ) {
         this.termName = termName;
         this.termType = termType;
-        this.isRequired = isRequired;
-        this.isActive = isActive;
+        this.required = required;
+        this.active = active;
         this.version = version;
         this.content = content;
         this.effectiveAt = effectiveAt;

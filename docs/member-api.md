@@ -58,7 +58,7 @@
 ]
 ```
 
-조회 조건: `is_active=true`, `effective_at <= now`, `expired_at IS NULL OR expired_at > now`, `term_id ASC` 정렬.
+조회 조건: `is_active=true`, `effective_at <= CURRENT_TIMESTAMP`, `expired_at IS NULL OR expired_at > CURRENT_TIMESTAMP`, `term_id ASC` 정렬.
 
 ### Errors
 

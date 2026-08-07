@@ -20,8 +20,7 @@ public class TermService implements ListActiveTermsUseCase {
 
     @Override
     public List<ActiveTermResultDto> listActiveTerms() {
-        Instant now = Instant.now();
-        return loadActiveTermsPort.findAllCurrentlyEffective(now).stream()
+        return loadActiveTermsPort.findAllCurrentlyEffective(Instant.now()).stream()
                 .map(this::toResultDto)
                 .toList();
     }
