@@ -12,6 +12,7 @@ import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
 import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
 import com.sparta.member_service.application.port.out.LoadActiveTermsPort;
+import com.sparta.member_service.application.port.out.LoadMemberTermConsentsPort;
 import com.sparta.member_service.application.port.out.MemberRepositoryPort;
 import com.sparta.member_service.application.port.out.SaveMemberTermConsentPort;
 import com.sparta.member_service.domain.enums.ConsentAction;
@@ -33,6 +34,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +45,7 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
     private final MemberRepositoryPort memberRepositoryPort;
     private final LoadActiveTermsPort loadActiveTermsPort;
     private final SaveMemberTermConsentPort saveMemberTermConsentPort;
+    private final LoadMemberTermConsentsPort loadMemberTermConsentsPort;
     private final PlatformTransactionManager transactionManager;
 
     @Override
@@ -57,20 +61,20 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
                 requestDto.getAddress()
         );
 
-        var existing = memberRepositoryPort.findByMemberUuid(memberUuid);
-        if (existing.isPresent()) {
-            return idempotentResult(existing.get(), requested);
-        }
-        if (memberRepositoryPort.existsByNickname(nickname)) {
-            throw new DuplicateResourceException("MEMBER_DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.");
-        }
-
         Instant actionAt = Instant.now();
         List<MemberTermConsentDomain> consents = buildSignupConsents(
                 memberUuid,
                 requestDto.getTermConsents(),
                 actionAt
         );
+
+        var existing = memberRepositoryPort.findByMemberUuid(memberUuid);
+        if (existing.isPresent()) {
+            return idempotentResult(existing.get(), requested, consents);
+        }
+        if (memberRepositoryPort.existsByNickname(nickname)) {
+            throw new DuplicateResourceException("MEMBER_DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.");
+        }
 
         try {
             return new TransactionTemplate(transactionManager).execute(status -> {
@@ -82,7 +86,7 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
             if ("MEMBER_DUPLICATE_UUID".equals(ex.getCode())) {
                 MemberDomain concurrent = memberRepositoryPort.findByMemberUuid(memberUuid)
                         .orElseThrow(() -> ex);
-                return idempotentResult(concurrent, requested);
+                return idempotentResult(concurrent, requested, consents);
             }
             throw ex;
         }
@@ -152,11 +156,44 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
         return agreedByCode;
     }
 
-    private CreateMemberResultDto idempotentResult(MemberDomain existing, MemberDomain requested) {
+    /**
+     * 동일 memberUuid 재요청 시 프로필·약관 동의를 맞춘다.
+     * 프로필이 같고 SIGN_UP 동의 이력만 비어 있거나 부분 누락이면 누락분을 저장한다.
+     */
+    private CreateMemberResultDto idempotentResult(
+            MemberDomain existing,
+            MemberDomain requested,
+            List<MemberTermConsentDomain> requestedConsents
+    ) {
         if (!Objects.equals(existing.getNickname(), requested.getNickname())
                 || !Objects.equals(existing.getProfileImageUrl(), requested.getProfileImageUrl())
                 || !Objects.equals(existing.getAddress(), requested.getAddress())) {
             throw new DuplicateResourceException("MEMBER_PROFILE_CONFLICT", "이미 다른 정보로 등록된 회원입니다.");
+        }
+
+        Set<Long> existingTermIds = loadMemberTermConsentsPort.findSignupConsentsByMemberUuid(existing.getMemberUuid())
+                .stream()
+                .map(MemberTermConsentDomain::getTermId)
+                .collect(Collectors.toSet());
+        Set<Long> requestedTermIds = requestedConsents.stream()
+                .map(MemberTermConsentDomain::getTermId)
+                .collect(Collectors.toSet());
+
+        if (existingTermIds.equals(requestedTermIds)) {
+            return toCreateResult(existing, false);
+        }
+        if (!requestedTermIds.containsAll(existingTermIds)) {
+            throw new DuplicateResourceException("MEMBER_PROFILE_CONFLICT", "이미 다른 정보로 등록된 회원입니다.");
+        }
+
+        List<MemberTermConsentDomain> missingConsents = requestedConsents.stream()
+                .filter(consent -> !existingTermIds.contains(consent.getTermId()))
+                .toList();
+        if (!missingConsents.isEmpty()) {
+            new TransactionTemplate(transactionManager).execute(status -> {
+                saveMemberTermConsentPort.saveAll(missingConsents);
+                return null;
+            });
         }
         return toCreateResult(existing, false);
     }

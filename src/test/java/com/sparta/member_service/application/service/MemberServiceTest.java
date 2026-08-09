@@ -5,6 +5,7 @@ import com.sparta.member_service.application.exception.InvalidTermConsentExcepti
 import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
 import com.sparta.member_service.application.port.out.LoadActiveTermsPort;
+import com.sparta.member_service.application.port.out.LoadMemberTermConsentsPort;
 import com.sparta.member_service.application.port.out.MemberRepositoryPort;
 import com.sparta.member_service.application.port.out.SaveMemberTermConsentPort;
 import com.sparta.member_service.domain.enums.ConsentAction;
@@ -51,6 +52,9 @@ class MemberServiceTest {
     private SaveMemberTermConsentPort saveMemberTermConsentPort;
 
     @Mock
+    private LoadMemberTermConsentsPort loadMemberTermConsentsPort;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     private MemberService memberService;
@@ -63,6 +67,7 @@ class MemberServiceTest {
                 memberRepositoryPort,
                 loadActiveTermsPort,
                 saveMemberTermConsentPort,
+                loadMemberTermConsentsPort,
                 transactionManager
         );
     }
@@ -121,8 +126,6 @@ class MemberServiceTest {
 
     @Test
     void createMember_throwsWhenRequiredConsentMissing() {
-        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.empty());
-        when(memberRepositoryPort.existsByNickname("닉네임")).thenReturn(false);
         when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
 
         assertThatThrownBy(() -> memberService.createMember(createRequest(
@@ -144,8 +147,6 @@ class MemberServiceTest {
 
     @Test
     void createMember_throwsWhenTermMasterMissing() {
-        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.empty());
-        when(memberRepositoryPort.existsByNickname("닉네임")).thenReturn(false);
         when(loadActiveTermsPort.findAllActive()).thenReturn(List.of());
 
         assertThatThrownBy(() -> memberService.createMember(createRequest(
@@ -166,6 +167,7 @@ class MemberServiceTest {
 
     @Test
     void createMember_throwsWhenMemberUuidAlreadyExists() {
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
         when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.of(
                 MemberDomain.create(MEMBER_UUID, "different", null, null)
         ));
@@ -183,6 +185,9 @@ class MemberServiceTest {
         MemberDomain existing = MemberDomain.create(MEMBER_UUID, "same-name", null, "Seoul");
         when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID))
                 .thenReturn(java.util.Optional.of(existing));
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
+        when(loadMemberTermConsentsPort.findSignupConsentsByMemberUuid(MEMBER_UUID))
+                .thenReturn(requiredConsentDomains());
 
         var result = memberService.createMember(createRequest("same-name", "Seoul", null, requiredConsents()));
 
@@ -194,7 +199,85 @@ class MemberServiceTest {
     }
 
     @Test
+    void createMember_backfillsMissingSignupConsentsOnReplay() {
+        MemberDomain existing = MemberDomain.create(MEMBER_UUID, "same-name", null, "Seoul");
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID))
+                .thenReturn(java.util.Optional.of(existing));
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
+        when(loadMemberTermConsentsPort.findSignupConsentsByMemberUuid(MEMBER_UUID))
+                .thenReturn(List.of());
+
+        var result = memberService.createMember(createRequest("same-name", "Seoul", null, requiredConsents()));
+
+        assertThat(result.isCreated()).isFalse();
+        verify(memberRepositoryPort, never()).save(any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MemberTermConsentDomain>> consentCaptor = ArgumentCaptor.forClass(List.class);
+        verify(saveMemberTermConsentPort).saveAll(consentCaptor.capture());
+        assertThat(consentCaptor.getValue()).hasSize(2);
+    }
+
+    @Test
+    void createMember_backfillsAdditionalOptionalConsentsOnReplay() {
+        MemberDomain existing = MemberDomain.create(MEMBER_UUID, "same-name", null, "Seoul");
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID))
+                .thenReturn(java.util.Optional.of(existing));
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
+        when(loadMemberTermConsentsPort.findSignupConsentsByMemberUuid(MEMBER_UUID))
+                .thenReturn(requiredConsentDomains());
+
+        var result = memberService.createMember(createRequest(
+                "same-name",
+                "Seoul",
+                null,
+                List.of(
+                        consent(TermCode.TERMS_OF_SERVICE, true),
+                        consent(TermCode.PRIVACY_POLICY, true),
+                        consent(TermCode.EMAIL_MARKETING, true)
+                )
+        ));
+
+        assertThat(result.isCreated()).isFalse();
+        verify(memberRepositoryPort, never()).save(any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MemberTermConsentDomain>> consentCaptor = ArgumentCaptor.forClass(List.class);
+        verify(saveMemberTermConsentPort).saveAll(consentCaptor.capture());
+        assertThat(consentCaptor.getValue())
+                .singleElement()
+                .extracting(MemberTermConsentDomain::getTermId)
+                .isEqualTo(3L);
+    }
+
+    @Test
+    void createMember_rejectsReplayWhenSignupConsentsConflict() {
+        MemberDomain existing = MemberDomain.create(MEMBER_UUID, "same-name", null, "Seoul");
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID))
+                .thenReturn(java.util.Optional.of(existing));
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
+        when(loadMemberTermConsentsPort.findSignupConsentsByMemberUuid(MEMBER_UUID))
+                .thenReturn(List.of(
+                        MemberTermConsentDomain.record(1L, MEMBER_UUID, ConsentAction.AGREE, ConsentChannel.SIGN_UP, EFFECTIVE_AT),
+                        MemberTermConsentDomain.record(2L, MEMBER_UUID, ConsentAction.AGREE, ConsentChannel.SIGN_UP, EFFECTIVE_AT),
+                        MemberTermConsentDomain.record(3L, MEMBER_UUID, ConsentAction.AGREE, ConsentChannel.SIGN_UP, EFFECTIVE_AT)
+                ));
+
+        assertThatThrownBy(() -> memberService.createMember(createRequest(
+                "same-name",
+                "Seoul",
+                null,
+                requiredConsents()
+        )))
+                .isInstanceOf(DuplicateResourceException.class)
+                .extracting("code")
+                .isEqualTo("MEMBER_PROFILE_CONFLICT");
+
+        verify(memberRepositoryPort, never()).save(any());
+        verify(saveMemberTermConsentPort, never()).saveAll(any());
+    }
+
+    @Test
     void createMember_throwsWhenNicknameAlreadyExists() {
+        when(loadActiveTermsPort.findAllActive()).thenReturn(activeTerms());
         when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.empty());
         when(memberRepositoryPort.existsByNickname("닉네임")).thenReturn(true);
 
@@ -279,6 +362,13 @@ class MemberServiceTest {
         return List.of(
                 consent(TermCode.TERMS_OF_SERVICE, true),
                 consent(TermCode.PRIVACY_POLICY, true)
+        );
+    }
+
+    private static List<MemberTermConsentDomain> requiredConsentDomains() {
+        return List.of(
+                MemberTermConsentDomain.record(1L, MEMBER_UUID, ConsentAction.AGREE, ConsentChannel.SIGN_UP, EFFECTIVE_AT),
+                MemberTermConsentDomain.record(2L, MEMBER_UUID, ConsentAction.AGREE, ConsentChannel.SIGN_UP, EFFECTIVE_AT)
         );
     }
 
