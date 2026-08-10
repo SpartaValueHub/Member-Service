@@ -1,4 +1,5 @@
--- member_db.terms 초기 데이터 (TermsDataInitializer 삭제 후 수동 시드용)
+-- member_db.terms 초기 데이터 (prod·공유 DB 수동 시드용)
+-- local/dev 는 TermsDevDataInitializer 가 비어 있을 때 자동 시드
 -- 실행 전: USE member_db; (또는 환경에 맞는 DB 선택)
 -- 조건: is_active=1, effective_at <= NOW(), expired_at IS NULL → GET /api/v1/terms/active 에 노출
 
