@@ -4,9 +4,11 @@ import com.sparta.member_service.adaptor.in.web.vo.CreateMemberRequestVo;
 import com.sparta.member_service.adaptor.in.web.vo.CreateMemberResponseVo;
 import com.sparta.member_service.adaptor.in.web.vo.MemberAvailabilityResponseVo;
 import com.sparta.member_service.adaptor.in.web.vo.MemberProfileResponseVo;
+import com.sparta.member_service.adaptor.in.web.vo.MemberPublicProfileResponseVo;
 import com.sparta.member_service.adaptor.in.web.vo.TermConsentItemVo;
 import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.CreateMemberResultDto;
+import com.sparta.member_service.application.port.in.dto.GetMemberPublicProfileResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
 import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
@@ -51,6 +53,14 @@ public class MemberWebMapper {
                 .profileImageUrl(dto.getProfileImageUrl())
                 .memberGrade(dto.getMemberGrade())
                 .address(dto.getAddress())
+                .build();
+    }
+
+    public MemberPublicProfileResponseVo toVo(GetMemberPublicProfileResultDto dto) {
+        return MemberPublicProfileResponseVo.builder()
+                .memberUuid(dto.getMemberUuid())
+                .nickname(dto.getNickname())
+                .profileImageUrl(dto.getProfileImageUrl())
                 .build();
     }
 

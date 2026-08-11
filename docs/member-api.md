@@ -218,3 +218,45 @@
 |--------|------|------|
 | 401 | MEMBER_AUTH_MISSING | JWT·X-Member-Uuid 헤더 없음 |
 | 404 | MEMBER_NOT_FOUND | 프로필 미등록 |
+
+---
+
+## 회원 공개 프로필 조회
+
+### Summary
+`memberUuid`로 닉네임·프로필 이미지만 조회합니다. Chat-Service Feign 등 **서비스 간 호출**용입니다.
+
+### Method · Path
+`GET /api/v1/members/{memberUuid}/profile`
+
+### Auth
+유저 JWT·`X-Member-Uuid` 불필요. 서비스 간 내부 호출을 전제로 합니다. (Gateway public 노출 여부는 별도)
+
+### Request (Path)
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| memberUuid | string | O | trim 후 조회. blank 불가 |
+
+### Response (200)
+
+| 필드 | 타입 |
+|------|------|
+| memberUuid | string |
+| nickname | string |
+| profileImageUrl | string |
+
+```json
+{
+  "memberUuid": "550e8400-e29b-41d4-a716-446655440000",
+  "nickname": "홍길동",
+  "profileImageUrl": null
+}
+```
+
+### Errors
+
+| status | code | 의미 |
+|--------|------|------|
+| 400 | INVALID_REQUEST | memberUuid blank 등 형식 오류 |
+| 404 | MEMBER_NOT_FOUND | 프로필 미등록 |

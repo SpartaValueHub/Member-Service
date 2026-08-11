@@ -5,12 +5,15 @@ import com.sparta.member_service.adaptor.in.web.vo.CreateMemberRequestVo;
 import com.sparta.member_service.adaptor.in.web.vo.CreateMemberResponseVo;
 import com.sparta.member_service.adaptor.in.web.vo.MemberAvailabilityResponseVo;
 import com.sparta.member_service.adaptor.in.web.vo.MemberProfileResponseVo;
+import com.sparta.member_service.adaptor.in.web.vo.MemberPublicProfileResponseVo;
 import com.sparta.member_service.application.exception.UnauthorizedException;
 import com.sparta.member_service.application.port.in.CheckNicknameAvailabilityUseCase;
 import com.sparta.member_service.application.port.in.CreateMemberUseCase;
+import com.sparta.member_service.application.port.in.GetMemberPublicProfileUseCase;
 import com.sparta.member_service.application.port.in.GetMyMemberUseCase;
 import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.CreateMemberResultDto;
+import com.sparta.member_service.application.port.in.dto.GetMemberPublicProfileResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,12 +22,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -41,6 +44,7 @@ public class MemberController {
     private final CreateMemberUseCase createMemberUseCase;
     private final CheckNicknameAvailabilityUseCase checkNicknameAvailabilityUseCase;
     private final GetMyMemberUseCase getMyMemberUseCase;
+    private final GetMemberPublicProfileUseCase getMemberPublicProfileUseCase;
     private final MemberWebMapper memberWebMapper;
 
     @Operation(summary = "닉네임 중복 확인", description = "회원가입 전 닉네임 사용 가능 여부를 확인합니다.")
@@ -72,6 +76,17 @@ public class MemberController {
     ) {
         String memberUuid = requireMemberUuid(headerMemberUuid);
         GetMyMemberResultDto resultDto = getMyMemberUseCase.getMyMember(memberUuid);
+        return memberWebMapper.toVo(resultDto);
+    }
+
+    @Operation(
+            summary = "회원 공개 프로필 조회",
+            description = "memberUuid로 닉네임·프로필 이미지만 조회합니다. Chat 등 서비스 간 호출용입니다."
+    )
+    @GetMapping("/members/{memberUuid}/profile")
+    public MemberPublicProfileResponseVo getMemberPublicProfile(@PathVariable String memberUuid) {
+        GetMemberPublicProfileResultDto resultDto =
+                getMemberPublicProfileUseCase.getMemberPublicProfile(memberUuid);
         return memberWebMapper.toVo(resultDto);
     }
 

@@ -5,9 +5,11 @@ import com.sparta.member_service.application.exception.InvalidTermConsentExcepti
 import com.sparta.member_service.application.exception.MemberNotFoundException;
 import com.sparta.member_service.application.port.in.CheckNicknameAvailabilityUseCase;
 import com.sparta.member_service.application.port.in.CreateMemberUseCase;
+import com.sparta.member_service.application.port.in.GetMemberPublicProfileUseCase;
 import com.sparta.member_service.application.port.in.GetMyMemberUseCase;
 import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.CreateMemberResultDto;
+import com.sparta.member_service.application.port.in.dto.GetMemberPublicProfileResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
 import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
@@ -40,7 +42,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabilityUseCase, GetMyMemberUseCase {
+public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabilityUseCase, GetMyMemberUseCase,
+        GetMemberPublicProfileUseCase {
 
     private final MemberRepositoryPort memberRepositoryPort;
     private final LoadActiveTermsPort loadActiveTermsPort;
@@ -233,6 +236,23 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
                 .profileImageUrl(member.getProfileImageUrl())
                 .memberGrade(member.getMemberGrade())
                 .address(member.getAddress())
+                .build();
+    }
+
+    @Override
+    public GetMemberPublicProfileResultDto getMemberPublicProfile(String memberUuid) {
+        String normalizedMemberUuid = memberUuid == null ? "" : memberUuid.trim();
+        if (normalizedMemberUuid.isBlank()) {
+            throw new IllegalArgumentException("memberUuid는 필수입니다.");
+        }
+
+        MemberDomain member = memberRepositoryPort.findByMemberUuid(normalizedMemberUuid)
+                .orElseThrow(() -> new MemberNotFoundException("MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다."));
+
+        return GetMemberPublicProfileResultDto.builder()
+                .memberUuid(member.getMemberUuid())
+                .nickname(member.getNickname())
+                .profileImageUrl(member.getProfileImageUrl())
                 .build();
     }
 }
