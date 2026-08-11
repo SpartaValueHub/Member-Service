@@ -16,6 +16,9 @@ import java.time.Instant;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MemberDomain {
 
+    /** Next.js public 기본 아바타 경로 — FE가 동일 경로에 에셋을 둔다. */
+    public static final String DEFAULT_PROFILE_IMAGE_URL = "/images/default-profile.png";
+
     private Long memberId;
     private String memberUuid;
     private String nickname;
@@ -35,7 +38,7 @@ public class MemberDomain {
     ) {
         validateMemberUuid(memberUuid);
         String trimmedNickname = validateAndTrimNickname(nickname);
-        String trimmedProfileImageUrl = trimNullable(profileImageUrl);
+        String trimmedProfileImageUrl = resolveProfileImageUrlOnCreate(profileImageUrl);
         validateProfileImageUrl(trimmedProfileImageUrl);
         String trimmedAddress = trimNullable(address);
         validateAddress(trimmedAddress);
@@ -136,6 +139,12 @@ public class MemberDomain {
         if (profileImageUrl != null && profileImageUrl.length() > 500) {
             throw new IllegalArgumentException("profileImageUrl은 500자 이하여야 합니다.");
         }
+    }
+
+    /** 회원가입 시 URL이 없으면 기본 아바타 URL을 넣는다. */
+    private static String resolveProfileImageUrlOnCreate(String profileImageUrl) {
+        String trimmed = trimNullable(profileImageUrl);
+        return trimmed == null ? DEFAULT_PROFILE_IMAGE_URL : trimmed;
     }
 
     private static void validateAddress(String address) {

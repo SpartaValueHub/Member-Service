@@ -33,6 +33,20 @@ class MemberDomainTest {
     }
 
     @Test
+    void create_appliesDefaultProfileImageUrlWhenBlank() {
+        MemberDomain member = MemberDomain.create(MEMBER_UUID, "닉네임", null, null);
+
+        assertThat(member.getProfileImageUrl()).isEqualTo(MemberDomain.DEFAULT_PROFILE_IMAGE_URL);
+    }
+
+    @Test
+    void create_appliesDefaultProfileImageUrlWhenWhitespace() {
+        MemberDomain member = MemberDomain.create(MEMBER_UUID, "닉네임", "   ", null);
+
+        assertThat(member.getProfileImageUrl()).isEqualTo(MemberDomain.DEFAULT_PROFILE_IMAGE_URL);
+    }
+
+    @Test
     void create_rejectsBlankMemberUuid() {
         assertThatThrownBy(() -> MemberDomain.create("  ", "nickname", null, null))
                 .isInstanceOf(IllegalArgumentException.class)

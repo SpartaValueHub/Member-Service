@@ -122,7 +122,7 @@
 |------|------|------|------|
 | memberUuid | string | O | auth-service sign-up 응답 authUuid와 동일 |
 | nickname | string | O | 50자 이하, trim |
-| profileImageUrl | string | X | 500자 이하 |
+| profileImageUrl | string | X | 500자 이하. 생략·blank면 기본값 `/images/default-profile.png` 저장 (Next.js public 에셋) |
 | address | string | X | 100자 이하 |
 | termConsents | array | O | 약관 동의 목록. 활성·동의가능 필수 약관은 `agreed=true` 필수 |
 | termConsents[].termCode | string | O | `TERMS_OF_SERVICE` · `PRIVACY_POLICY` · `EMAIL_MARKETING` · `SMS_MARKETING` |
@@ -156,11 +156,13 @@
 {
   "memberUuid": "550e8400-e29b-41d4-a716-446655440000",
   "nickname": "홍길동",
-  "profileImageUrl": null,
+  "profileImageUrl": "/images/default-profile.png",
   "memberGrade": "BRONZE",
   "address": "서울특별시 강남구 테헤란로 123"
 }
 ```
+
+요청에 `profileImageUrl`이 없거나 blank이면 응답·저장 값은 기본 아바타 URL `/images/default-profile.png` 입니다.
 
 ### Errors
 
