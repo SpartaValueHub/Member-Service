@@ -343,6 +343,46 @@ class MemberServiceTest {
                 .isEqualTo("MEMBER_NOT_FOUND");
     }
 
+    @Test
+    void getMemberPublicProfile_returnsNicknameAndImageOnly() {
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.of(
+                MemberDomain.reconstitute(
+                        1L,
+                        MEMBER_UUID,
+                        "닉네임",
+                        "https://example.com/a.png",
+                        MemberGrade.BRONZE,
+                        "서울",
+                        false,
+                        false,
+                        null,
+                        null
+                )
+        ));
+
+        var result = memberService.getMemberPublicProfile(MEMBER_UUID);
+
+        assertThat(result.getMemberUuid()).isEqualTo(MEMBER_UUID);
+        assertThat(result.getNickname()).isEqualTo("닉네임");
+        assertThat(result.getProfileImageUrl()).isEqualTo("https://example.com/a.png");
+    }
+
+    @Test
+    void getMemberPublicProfile_throwsWhenNotFound() {
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> memberService.getMemberPublicProfile(MEMBER_UUID))
+                .isInstanceOf(com.sparta.member_service.application.exception.MemberNotFoundException.class)
+                .extracting("code")
+                .isEqualTo("MEMBER_NOT_FOUND");
+    }
+
+    @Test
+    void getMemberPublicProfile_throwsWhenBlankUuid() {
+        assertThatThrownBy(() -> memberService.getMemberPublicProfile("  "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private CreateMemberRequestDto createRequest(
             String nickname,
             String address,
