@@ -7,12 +7,14 @@ import com.sparta.member_service.application.port.in.CheckNicknameAvailabilityUs
 import com.sparta.member_service.application.port.in.CreateMemberUseCase;
 import com.sparta.member_service.application.port.in.GetMemberPublicProfileUseCase;
 import com.sparta.member_service.application.port.in.GetMyMemberUseCase;
+import com.sparta.member_service.application.port.in.UpdateMyMemberUseCase;
 import com.sparta.member_service.application.port.in.dto.CreateMemberRequestDto;
 import com.sparta.member_service.application.port.in.dto.CreateMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMemberPublicProfileResultDto;
 import com.sparta.member_service.application.port.in.dto.GetMyMemberResultDto;
 import com.sparta.member_service.application.port.in.dto.MemberAvailabilityResultDto;
 import com.sparta.member_service.application.port.in.dto.TermConsentItemDto;
+import com.sparta.member_service.application.port.in.dto.UpdateMyMemberCommand;
 import com.sparta.member_service.application.port.out.LoadActiveTermsPort;
 import com.sparta.member_service.application.port.out.LoadMemberTermConsentsPort;
 import com.sparta.member_service.application.port.out.MemberRepositoryPort;
@@ -43,7 +45,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabilityUseCase, GetMyMemberUseCase,
-        GetMemberPublicProfileUseCase {
+        GetMemberPublicProfileUseCase, UpdateMyMemberUseCase {
 
     private final MemberRepositoryPort memberRepositoryPort;
     private final LoadActiveTermsPort loadActiveTermsPort;
@@ -230,13 +232,7 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
         MemberDomain member = memberRepositoryPort.findByMemberUuid(normalizedMemberUuid)
                 .orElseThrow(() -> new MemberNotFoundException("MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다."));
 
-        return GetMyMemberResultDto.builder()
-                .memberUuid(member.getMemberUuid())
-                .nickname(member.getNickname())
-                .profileImageUrl(member.getProfileImageUrl())
-                .memberGrade(member.getMemberGrade())
-                .address(member.getAddress())
-                .build();
+        return toMyMemberResult(member);
     }
 
     @Override
@@ -253,6 +249,51 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
                 .memberUuid(member.getMemberUuid())
                 .nickname(member.getNickname())
                 .profileImageUrl(member.getProfileImageUrl())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public GetMyMemberResultDto updateMyMember(UpdateMyMemberCommand command) {
+        String normalizedMemberUuid = command.getMemberUuid() == null ? "" : command.getMemberUuid().trim();
+        if (normalizedMemberUuid.isBlank()) {
+            throw new MemberNotFoundException("MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다.");
+        }
+
+        MemberDomain existing = memberRepositoryPort.findByMemberUuid(normalizedMemberUuid)
+                .orElseThrow(() -> new MemberNotFoundException("MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다."));
+
+        // null 필드는 기존 값 유지 (부분 갱신)
+        String nickname = command.getNickname() != null ? command.getNickname() : existing.getNickname();
+        String profileImageUrl = command.getProfileImageUrl() != null
+                ? command.getProfileImageUrl()
+                : existing.getProfileImageUrl();
+        String address = command.getAddress() != null ? command.getAddress() : existing.getAddress();
+
+        String normalizedNickname = MemberDomain.normalizeNicknameForLookup(nickname);
+        if (!existing.getNickname().equals(normalizedNickname)
+                && memberRepositoryPort.existsByNickname(normalizedNickname)) {
+            throw new DuplicateResourceException("MEMBER_DUPLICATE_NICKNAME", "이미 사용 중인 닉네임입니다.");
+        }
+
+        MemberDomain updated = existing.updateProfile(
+                normalizedNickname,
+                profileImageUrl,
+                address,
+                existing.getMemberGrade(),
+                existing.isPremium()
+        );
+        MemberDomain saved = memberRepositoryPort.save(updated);
+        return toMyMemberResult(saved);
+    }
+
+    private GetMyMemberResultDto toMyMemberResult(MemberDomain member) {
+        return GetMyMemberResultDto.builder()
+                .memberUuid(member.getMemberUuid())
+                .nickname(member.getNickname())
+                .profileImageUrl(member.getProfileImageUrl())
+                .memberGrade(member.getMemberGrade())
+                .address(member.getAddress())
                 .build();
     }
 }

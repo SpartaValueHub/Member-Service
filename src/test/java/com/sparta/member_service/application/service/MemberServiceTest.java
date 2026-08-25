@@ -383,6 +383,68 @@ class MemberServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void updateMyMember_updatesProfileImageOnly() {
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.of(
+                MemberDomain.reconstitute(
+                        1L,
+                        MEMBER_UUID,
+                        "닉네임",
+                        "/images/default-profile.png",
+                        MemberGrade.BRONZE,
+                        "서울",
+                        false,
+                        false,
+                        null,
+                        null
+                )
+        ));
+        when(memberRepositoryPort.save(any(MemberDomain.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var result = memberService.updateMyMember(
+                com.sparta.member_service.application.port.in.dto.UpdateMyMemberCommand.builder()
+                        .memberUuid(MEMBER_UUID)
+                        .profileImageUrl("https://dxxxx.cloudfront.net/profiles/" + MEMBER_UUID + "/a.jpg")
+                        .build()
+        );
+
+        assertThat(result.getNickname()).isEqualTo("닉네임");
+        assertThat(result.getProfileImageUrl())
+                .isEqualTo("https://dxxxx.cloudfront.net/profiles/" + MEMBER_UUID + "/a.jpg");
+        assertThat(result.getAddress()).isEqualTo("서울");
+        verify(memberRepositoryPort).save(any(MemberDomain.class));
+    }
+
+    @Test
+    void updateMyMember_rejectsDuplicateNickname() {
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.of(
+                MemberDomain.reconstitute(
+                        1L,
+                        MEMBER_UUID,
+                        "닉네임",
+                        null,
+                        MemberGrade.BRONZE,
+                        null,
+                        false,
+                        false,
+                        null,
+                        null
+                )
+        ));
+        when(memberRepositoryPort.existsByNickname("새닉네임")).thenReturn(true);
+
+        assertThatThrownBy(() -> memberService.updateMyMember(
+                com.sparta.member_service.application.port.in.dto.UpdateMyMemberCommand.builder()
+                        .memberUuid(MEMBER_UUID)
+                        .nickname("새닉네임")
+                        .build()
+        ))
+                .isInstanceOf(DuplicateResourceException.class)
+                .extracting("code")
+                .isEqualTo("MEMBER_DUPLICATE_NICKNAME");
+        verify(memberRepositoryPort, never()).save(any());
+    }
+
     private CreateMemberRequestDto createRequest(
             String nickname,
             String address,

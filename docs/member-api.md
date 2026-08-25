@@ -223,6 +223,103 @@
 
 ---
 
+## 내 회원 프로필 수정
+
+### Summary
+MyPage에서 닉네임·프로필 이미지·주소를 부분 수정합니다. 요청 body에서 **null(또는 미전달) 필드는 기존 값을 유지**합니다.
+
+### Method · Path
+`PATCH /api/v1/members/me`
+
+### Auth
+필요 — Gateway JWT. Gateway가 `X-Member-Uuid` 헤더를 주입합니다.
+
+### Request (Body)
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| nickname | string | X | 전달 시 50자 이하, trim. null이면 유지 |
+| profileImageUrl | string | X | 전달 시 500자 이하. CloudFront publicUrl 권장. null이면 유지 |
+| address | string | X | 전달 시 100자 이하. null이면 유지 |
+
+```json
+{
+  "profileImageUrl": "https://dxxxx.cloudfront.net/profiles/550e8400-e29b-41d4-a716-446655440000/uuid.jpg"
+}
+```
+
+### Response (200)
+
+| 필드 | 타입 |
+|------|------|
+| memberUuid | string |
+| nickname | string |
+| profileImageUrl | string |
+| memberGrade | string |
+| address | string |
+
+### Errors
+
+| status | code | 의미 |
+|--------|------|------|
+| 400 | INVALID_REQUEST | nickname·address·profileImageUrl 형식 오류 |
+| 401 | MEMBER_AUTH_MISSING | JWT·X-Member-Uuid 헤더 없음 |
+| 404 | MEMBER_NOT_FOUND | 프로필 미등록 |
+| 409 | MEMBER_DUPLICATE_NICKNAME | 닉네임 중복 |
+
+---
+
+## 프로필 이미지 Presigned URL 발급
+
+### Summary
+클라이언트가 S3에 직접 PUT할 Presigned URL과 CloudFront `publicUrl`을 발급합니다. PUT 후 `PATCH /members/me`에 `publicUrl`을 `profileImageUrl`로 저장합니다.
+
+### Method · Path
+`POST /api/v1/members/me/media/presigned-url`
+
+### Auth
+필요 — Gateway JWT + `X-Member-Uuid`
+
+### Request (Body)
+
+| 필드 | 타입 | 필수 | 제약 |
+|------|------|------|------|
+| contentType | string | O | `image/jpeg` · `image/png` · `image/webp` · `image/gif` |
+| contentLength | number | O | 1 이상 5,242,880(5MB) 이하 |
+
+```json
+{
+  "contentType": "image/jpeg",
+  "contentLength": 1048576
+}
+```
+
+### Response (200)
+
+| 필드 | 타입 |
+|------|------|
+| uploadUrl | string | S3 Presigned PUT URL |
+| s3Key | string | `profiles/{memberUuid}/{uuid}.{ext}` |
+| publicUrl | string | `CLOUDFRONT_BASE_URL` + `/` + s3Key |
+| expiresInSeconds | number | 기본 300 |
+
+### 클라이언트 업로드
+
+1. 본 API로 `uploadUrl`·`publicUrl` 수신
+2. `uploadUrl`로 **PUT** (헤더 `Content-Type`은 요청과 **동일**, body는 파일 바이트)
+3. `PATCH /api/v1/members/me`에 `profileImageUrl: publicUrl` 저장
+
+### Errors
+
+| status | code | 의미 |
+|--------|------|------|
+| 400 | INVALID_CONTENT_TYPE | 허용되지 않는 Content-Type |
+| 400 | INVALID_CONTENT_LENGTH | 용량 범위 초과·누락 |
+| 401 | MEMBER_AUTH_MISSING | JWT·X-Member-Uuid 헤더 없음 |
+| 500 | MEDIA_CONFIG_MISSING | S3_BUCKET / CLOUDFRONT_BASE_URL 미설정 |
+
+---
+
 ## 회원 공개 프로필 조회
 
 ### Summary
