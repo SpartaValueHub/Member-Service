@@ -239,14 +239,16 @@ MyPage에서 닉네임·프로필 이미지·주소를 부분 수정합니다. �
 | 필드 | 타입 | 필수 | 제약 |
 |------|------|------|------|
 | nickname | string | X | 전달 시 50자 이하, trim. null이면 유지 |
-| profileImageUrl | string | X | 전달 시 500자 이하. CloudFront publicUrl 권장. null이면 유지 |
+| profileImageUrl | string | X | 전달 시 500자 이하. Presign `publicUrl`(pending) 또는 이미 승격된 CloudFront URL. PATCH 성공 시 정식 `profiles/` URL로 저장. null이면 유지 |
 | address | string | X | 전달 시 100자 이하. null이면 유지 |
 
 ```json
 {
-  "profileImageUrl": "https://dxxxx.cloudfront.net/profiles/550e8400-e29b-41d4-a716-446655440000/uuid.jpg"
+  "profileImageUrl": "https://dxxxx.cloudfront.net/pending/profiles/550e8400-e29b-41d4-a716-446655440000/uuid.jpg"
 }
 ```
+
+BE는 본인 `pending/profiles/{memberUuid}/...` 인지 검증한 뒤 S3 Copy로 `profiles/{memberUuid}/...` 에 승격하고, 응답·DB에는 정식 URL만 넣는다. pending URL을 그대로 저장하지 않는다.
 
 ### Response (200)
 
@@ -263,16 +265,20 @@ MyPage에서 닉네임·프로필 이미지·주소를 부분 수정합니다. �
 | status | code | 의미 |
 |--------|------|------|
 | 400 | INVALID_REQUEST | nickname·address·profileImageUrl 형식 오류 |
+| 400 | INVALID_MEDIA_KEY | 미디어 URL/key 형식 오류 |
+| 400 | MEDIA_OBJECT_NOT_FOUND | pending 객체가 S3에 없음 |
 | 401 | MEMBER_AUTH_MISSING | JWT·X-Member-Uuid 헤더 없음 |
+| 403 | FORBIDDEN | 타인 pending/정식 미디어 key |
 | 404 | MEMBER_NOT_FOUND | 프로필 미등록 |
 | 409 | MEMBER_DUPLICATE_NICKNAME | 닉네임 중복 |
+| 500 | MEDIA_STORAGE_FAILED | S3 Copy·Delete 실패 |
 
 ---
 
 ## 프로필 이미지 Presigned URL 발급
 
 ### Summary
-클라이언트가 S3에 직접 PUT할 Presigned URL과 CloudFront `publicUrl`을 발급합니다. PUT 후 `PATCH /members/me`에 `publicUrl`을 `profileImageUrl`로 저장합니다.
+클라이언트가 S3에 직접 PUT할 Presigned URL과 CloudFront `publicUrl`을 발급합니다. 발급 key는 **미확정 `pending/profiles/...`** 입니다. PUT 후 `PATCH /members/me`에 받은 `publicUrl`을 넣으면 BE가 정식 `profiles/` 로 승격합니다.
 
 ### Method · Path
 `POST /api/v1/members/me/media/presigned-url`
@@ -299,15 +305,15 @@ MyPage에서 닉네임·프로필 이미지·주소를 부분 수정합니다. �
 | 필드 | 타입 |
 |------|------|
 | uploadUrl | string | S3 Presigned PUT URL |
-| s3Key | string | `profiles/{memberUuid}/{uuid}.{ext}` |
+| s3Key | string | `pending/profiles/{memberUuid}/{uuid}.{ext}` |
 | publicUrl | string | `CLOUDFRONT_BASE_URL` + `/` + s3Key |
 | expiresInSeconds | number | 기본 300 |
 
 ### 클라이언트 업로드
 
-1. 본 API로 `uploadUrl`·`publicUrl` 수신
+1. 본 API로 `uploadUrl`·`publicUrl` 수신 (`s3Key`는 `pending/profiles/...`)
 2. `uploadUrl`로 **PUT** (헤더 `Content-Type`은 요청과 **동일**, body는 파일 바이트)
-3. `PATCH /api/v1/members/me`에 `profileImageUrl: publicUrl` 저장
+3. `PATCH /api/v1/members/me`에 `profileImageUrl: publicUrl` 전달 → BE가 `profiles/`로 승격 후 DB 저장
 
 ### Errors
 

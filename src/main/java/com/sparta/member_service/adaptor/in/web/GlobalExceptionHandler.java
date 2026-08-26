@@ -2,9 +2,11 @@ package com.sparta.member_service.adaptor.in.web;
 
 import com.sparta.member_service.adaptor.in.web.vo.ErrorResponseVo;
 import com.sparta.member_service.application.exception.DuplicateResourceException;
+import com.sparta.member_service.application.exception.ForbiddenException;
 import com.sparta.member_service.application.exception.InvalidTermConsentException;
 import com.sparta.member_service.application.exception.MediaConfigurationException;
 import com.sparta.member_service.application.exception.MediaInvalidRequestException;
+import com.sparta.member_service.application.exception.MediaStorageException;
 import com.sparta.member_service.application.exception.MemberNotFoundException;
 import com.sparta.member_service.application.exception.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,6 +72,24 @@ public class GlobalExceptionHandler {
     ) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(error(HttpStatus.UNAUTHORIZED, ex.getCode(), ex.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponseVo> handleForbidden(
+            ForbiddenException ex,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(error(HttpStatus.FORBIDDEN, ex.getCode(), ex.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(MediaStorageException.class)
+    public ResponseEntity<ErrorResponseVo> handleMediaStorage(
+            MediaStorageException ex,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(error(HttpStatus.INTERNAL_SERVER_ERROR, ex.getCode(), ex.getMessage(), request.getRequestURI()));
     }
 
     @ExceptionHandler(MemberNotFoundException.class)

@@ -48,6 +48,8 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
         GetMemberPublicProfileUseCase, UpdateMyMemberUseCase {
 
     private final MemberRepositoryPort memberRepositoryPort;
+    // pending 미디어 승격
+    private final PromotePendingMediaService promotePendingMediaService;
     private final LoadActiveTermsPort loadActiveTermsPort;
     private final SaveMemberTermConsentPort saveMemberTermConsentPort;
     private final LoadMemberTermConsentsPort loadMemberTermConsentsPort;
@@ -266,7 +268,7 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
         // null 필드는 기존 값 유지 (부분 갱신)
         String nickname = command.getNickname() != null ? command.getNickname() : existing.getNickname();
         String profileImageUrl = command.getProfileImageUrl() != null
-                ? command.getProfileImageUrl()
+                ? promotePendingMediaService.persistSingle(normalizedMemberUuid, command.getProfileImageUrl())
                 : existing.getProfileImageUrl();
         String address = command.getAddress() != null ? command.getAddress() : existing.getAddress();
 
@@ -284,6 +286,11 @@ public class MemberService implements CreateMemberUseCase, CheckNicknameAvailabi
                 existing.isPremium()
         );
         MemberDomain saved = memberRepositoryPort.save(updated);
+        if (command.getProfileImageUrl() != null
+                && profileImageUrl != null
+                && !profileImageUrl.equals(existing.getProfileImageUrl())) {
+            promotePendingMediaService.deleteConfirmedIfOwned(normalizedMemberUuid, existing.getProfileImageUrl());
+        }
         return toMyMemberResult(saved);
     }
 
