@@ -10,46 +10,26 @@ import com.sparta.member_service.config.MediaProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
 @Service
 @RequiredArgsConstructor
 public class IssuePresignedUploadService implements IssuePresignedUploadUseCase {
 
-	// 허용 Content-Type
-	private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-			"image/jpeg",
-			"image/png",
-			"image/webp",
-			"image/gif"
-	);
-
-	// Content-Type → 확장자
-	private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
-			"image/jpeg", "jpg",
-			"image/png", "png",
-			"image/webp", "webp",
-			"image/gif", "gif"
-	);
-
 	// S3 Presign Port
 	private final PresignObjectPutPort presignObjectPutPort;
+	// key 규칙
+	private final MediaObjectKeyPolicy mediaObjectKeyPolicy;
 	// 미디어 설정
 	private final MediaProperties mediaProperties;
 
 	@Override
 	public IssuePresignedUploadResultDto issuePresignedUpload(IssuePresignedUploadCommand command) {
 		String memberUuid = requireMemberUuid(command.getMemberUuid());
-		String contentType = normalizeContentType(command.getContentType());
+		String contentType = mediaObjectKeyPolicy.requireContentType(command.getContentType());
 		long contentLength = requireContentLength(command.getContentLength());
 
 		assertMediaConfigured();
 
-		String extension = EXTENSION_BY_CONTENT_TYPE.get(contentType);
-		String s3Key = "profiles/" + memberUuid + "/" + UUID.randomUUID() + "." + extension;
+		String s3Key = mediaObjectKeyPolicy.createPendingKey(memberUuid, contentType);
 		int expiresInSeconds = mediaProperties.getPresignTtlSeconds();
 		String uploadUrl = presignObjectPutPort.createPutUrl(
 				s3Key,
@@ -57,12 +37,11 @@ public class IssuePresignedUploadService implements IssuePresignedUploadUseCase 
 				contentLength,
 				expiresInSeconds
 		);
-		String publicUrl = buildPublicUrl(s3Key);
 
 		return IssuePresignedUploadResultDto.builder()
 				.uploadUrl(uploadUrl)
 				.s3Key(s3Key)
-				.publicUrl(publicUrl)
+				.publicUrl(mediaObjectKeyPolicy.toPublicUrl(s3Key))
 				.expiresInSeconds(expiresInSeconds)
 				.build();
 	}
@@ -72,17 +51,6 @@ public class IssuePresignedUploadService implements IssuePresignedUploadUseCase 
 			throw new IllegalArgumentException("memberUuid는 필수입니다.");
 		}
 		return memberUuid.trim();
-	}
-
-	private String normalizeContentType(String contentType) {
-		if (contentType == null || contentType.isBlank()) {
-			throw new MediaInvalidRequestException("INVALID_CONTENT_TYPE", "허용되지 않는 Content-Type입니다.");
-		}
-		String normalized = contentType.trim().toLowerCase(Locale.ROOT);
-		if (!ALLOWED_CONTENT_TYPES.contains(normalized)) {
-			throw new MediaInvalidRequestException("INVALID_CONTENT_TYPE", "허용되지 않는 Content-Type입니다.");
-		}
-		return normalized;
 	}
 
 	private long requireContentLength(Long contentLength) {
@@ -102,13 +70,5 @@ public class IssuePresignedUploadService implements IssuePresignedUploadUseCase 
 		if (mediaProperties.getCloudfrontBaseUrl() == null || mediaProperties.getCloudfrontBaseUrl().isBlank()) {
 			throw new MediaConfigurationException("MEDIA_CONFIG_MISSING", "CLOUDFRONT_BASE_URL이 설정되지 않았습니다.");
 		}
-	}
-
-	private String buildPublicUrl(String s3Key) {
-		String base = mediaProperties.getCloudfrontBaseUrl().trim();
-		if (base.endsWith("/")) {
-			base = base.substring(0, base.length() - 1);
-		}
-		return base + "/" + s3Key;
 	}
 }

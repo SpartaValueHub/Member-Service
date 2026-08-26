@@ -51,26 +51,32 @@ class MemberServiceTest {
     @Mock
     private SaveMemberTermConsentPort saveMemberTermConsentPort;
 
-    @Mock
-    private LoadMemberTermConsentsPort loadMemberTermConsentsPort;
+	@Mock
+	private LoadMemberTermConsentsPort loadMemberTermConsentsPort;
 
-    @Mock
-    private PlatformTransactionManager transactionManager;
+	@Mock
+	private PlatformTransactionManager transactionManager;
 
-    private MemberService memberService;
+	@Mock
+	private PromotePendingMediaService promotePendingMediaService;
 
-    @BeforeEach
-    void setUp() {
-        lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+	private MemberService memberService;
 
-        memberService = new MemberService(
-                memberRepositoryPort,
-                loadActiveTermsPort,
-                saveMemberTermConsentPort,
-                loadMemberTermConsentsPort,
-                transactionManager
-        );
-    }
+	@BeforeEach
+	void setUp() {
+		lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+		lenient().when(promotePendingMediaService.persistSingle(any(), any()))
+				.thenAnswer(invocation -> invocation.getArgument(1));
+
+		memberService = new MemberService(
+				memberRepositoryPort,
+				promotePendingMediaService,
+				loadActiveTermsPort,
+				saveMemberTermConsentPort,
+				loadMemberTermConsentsPort,
+				transactionManager
+		);
+	}
 
     @Test
     void createMember_savesNewProfileAndConsents() {
@@ -413,6 +419,39 @@ class MemberServiceTest {
                 .isEqualTo("https://dxxxx.cloudfront.net/profiles/" + MEMBER_UUID + "/a.jpg");
         assertThat(result.getAddress()).isEqualTo("서울");
         verify(memberRepositoryPort).save(any(MemberDomain.class));
+    }
+
+    @Test
+    void updateMyMember_storesPromotedProfileImageUrl() {
+        when(memberRepositoryPort.findByMemberUuid(MEMBER_UUID)).thenReturn(java.util.Optional.of(
+                MemberDomain.reconstitute(
+                        1L,
+                        MEMBER_UUID,
+                        "닉네임",
+                        "/images/default-profile.png",
+                        MemberGrade.BRONZE,
+                        "서울",
+                        false,
+                        false,
+                        null,
+                        null
+                )
+        ));
+        when(memberRepositoryPort.save(any(MemberDomain.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        String pendingUrl = "https://dxxxx.cloudfront.net/pending/profiles/" + MEMBER_UUID + "/a.jpg";
+        String confirmedUrl = "https://dxxxx.cloudfront.net/profiles/" + MEMBER_UUID + "/a.jpg";
+        when(promotePendingMediaService.persistSingle(MEMBER_UUID, pendingUrl)).thenReturn(confirmedUrl);
+
+        var result = memberService.updateMyMember(
+                com.sparta.member_service.application.port.in.dto.UpdateMyMemberCommand.builder()
+                        .memberUuid(MEMBER_UUID)
+                        .profileImageUrl(pendingUrl)
+                        .build()
+        );
+
+        assertThat(result.getProfileImageUrl()).isEqualTo(confirmedUrl);
+        verify(promotePendingMediaService).persistSingle(MEMBER_UUID, pendingUrl);
+        verify(promotePendingMediaService).deleteConfirmedIfOwned(MEMBER_UUID, "/images/default-profile.png");
     }
 
     @Test

@@ -38,7 +38,19 @@ class IssuePresignedUploadServiceTest {
 		mediaProperties.setAwsRegion("ap-northeast-2");
 		mediaProperties.setMaxBytes(5_242_880L);
 		mediaProperties.setPresignTtlSeconds(300);
-		service = new IssuePresignedUploadService(presignObjectPutPort, mediaProperties);
+		mediaProperties.setPendingPrefix("pending/");
+		mediaProperties.setConfirmedPrefix("profiles/");
+		mediaProperties.setExtensionByContentType(java.util.Map.of(
+				"image/jpeg", "jpg",
+				"image/png", "png",
+				"image/webp", "webp",
+				"image/gif", "gif"
+		));
+		service = new IssuePresignedUploadService(
+				presignObjectPutPort,
+				new MediaObjectKeyPolicy(mediaProperties),
+				mediaProperties
+		);
 	}
 
 	@Test
@@ -55,9 +67,9 @@ class IssuePresignedUploadServiceTest {
 		);
 
 		assertThat(result.getUploadUrl()).isEqualTo("https://s3.example/upload");
-		assertThat(result.getS3Key()).startsWith("profiles/" + MEMBER_UUID + "/");
+		assertThat(result.getS3Key()).startsWith("pending/profiles/" + MEMBER_UUID + "/");
 		assertThat(result.getS3Key()).endsWith(".jpg");
-		assertThat(result.getPublicUrl()).startsWith("https://dxxxx.cloudfront.net/profiles/" + MEMBER_UUID + "/");
+		assertThat(result.getPublicUrl()).startsWith("https://dxxxx.cloudfront.net/pending/profiles/" + MEMBER_UUID + "/");
 		assertThat(result.getExpiresInSeconds()).isEqualTo(300);
 		verify(presignObjectPutPort).createPutUrl(anyString(), eq("image/jpeg"), eq(1024L), eq(300));
 	}
