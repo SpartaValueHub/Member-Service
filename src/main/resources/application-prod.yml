@@ -30,3 +30,5 @@ logging:
   level:
     root: WARN
     org.hibernate.SQL: OFF
+    com.sparta.member_service.application.service.IssuePresignedUploadService: INFO
+    com.sparta.member_service.config.MediaAwsConfig: INFO

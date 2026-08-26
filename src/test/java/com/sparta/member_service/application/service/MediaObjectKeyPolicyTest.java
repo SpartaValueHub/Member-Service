@@ -33,6 +33,25 @@ class MediaObjectKeyPolicyTest {
 	}
 
 	@Test
+	void createPendingKey_fallsBackWhenExtensionMapEmpty() {
+		MediaProperties emptyMap = new MediaProperties();
+		emptyMap.setPendingPrefix("pending/");
+		emptyMap.setConfirmedPrefix("profiles/");
+		emptyMap.setExtensionByContentType(Map.of());
+		MediaObjectKeyPolicy emptyPolicy = new MediaObjectKeyPolicy(emptyMap);
+
+		String key = emptyPolicy.createPendingKey(MEMBER_UUID, "image/jpeg");
+
+		assertThat(key).startsWith("pending/profiles/" + MEMBER_UUID + "/");
+		assertThat(key).endsWith(".jpg");
+	}
+
+	@Test
+	void requireContentType_stripsCharsetParameter() {
+		assertThat(policy.requireContentType("image/jpeg; charset=UTF-8")).isEqualTo("image/jpeg");
+	}
+
+	@Test
 	void resolve_promotesOwnPendingUrlToConfirmed() {
 		String pendingUrl = "https://dxxxx.cloudfront.net/pending/profiles/" + MEMBER_UUID + "/a1.jpg";
 

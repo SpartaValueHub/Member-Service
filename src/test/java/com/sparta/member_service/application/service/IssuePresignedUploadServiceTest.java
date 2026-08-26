@@ -89,6 +89,24 @@ class IssuePresignedUploadServiceTest {
 	}
 
 	@Test
+	void issuePresignedUpload_acceptsJpegWhenExtensionMapEmpty() {
+		mediaProperties.setExtensionByContentType(java.util.Map.of());
+		when(presignObjectPutPort.createPutUrl(anyString(), eq("image/jpeg"), eq(12345L), eq(300)))
+				.thenReturn("https://s3.example/upload");
+
+		IssuePresignedUploadResultDto result = service.issuePresignedUpload(
+				IssuePresignedUploadCommand.builder()
+						.memberUuid(MEMBER_UUID)
+						.contentType("image/jpeg")
+						.contentLength(12345L)
+						.build()
+		);
+
+		assertThat(result.getS3Key()).startsWith("pending/profiles/" + MEMBER_UUID + "/");
+		assertThat(result.getS3Key()).endsWith(".jpg");
+	}
+
+	@Test
 	void issuePresignedUpload_rejectsTooLargeContentLength() {
 		assertThatThrownBy(() -> service.issuePresignedUpload(
 				IssuePresignedUploadCommand.builder()

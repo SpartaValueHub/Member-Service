@@ -15,6 +15,14 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "app.media")
 public class MediaProperties {
 
+	// yaml 미바인딩·empty map 대비 기본 허용 Content-Type
+	public static final Map<String, String> DEFAULT_EXTENSION_BY_CONTENT_TYPE = Map.of(
+			"image/jpeg", "jpg",
+			"image/png", "png",
+			"image/webp", "webp",
+			"image/gif", "gif"
+	);
+
 	// S3 버킷명
 	private String s3Bucket = "";
 	// CloudFront 공개 base URL (끝 슬래시 없이)
@@ -33,4 +41,12 @@ public class MediaProperties {
 	private Map<String, String> extensionByContentType = new LinkedHashMap<>();
 	// 승격 없이 그대로 저장할 URL (기본 아바타 등)
 	private List<String> passthroughUrls = new ArrayList<>();
+
+	// empty map이면 jpeg/png/webp/gif 기본값을 쓴다
+	public Map<String, String> resolvedExtensionByContentType() {
+		if (extensionByContentType == null || extensionByContentType.isEmpty()) {
+			return DEFAULT_EXTENSION_BY_CONTENT_TYPE;
+		}
+		return extensionByContentType;
+	}
 }
